@@ -1,0 +1,42 @@
+;
+; NAND two input pins and output the result  
+;
+
+.program nand
+
+  mov isr, null    ; Clear input register
+  in pins, 2       ; Read pins
+  mov x, isr       ;           into X
+  mov osr, ~null   ; Assume we'll output true
+  jmp x!=y output  ; Compare X with 3 (Y is set to 3 before execution begins)
+  mov osr, null    ; Input was 3 (both true), so output should be false
+output:
+  out pins, 1      ; Send output to pin
+  
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void nand_init(PIO pio, uint sm, uint offset, uint pin_in, uint pin_out) {
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_in, 2, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_out, 1, true);
+    pio_gpio_init(pio, pin_in);
+    gpio_pull_down(pin_in);
+    pio_gpio_init(pio, pin_in + 1);
+    gpio_pull_down(pin_in + 1);
+    pio_gpio_init(pio, pin_out);
+
+    pio_sm_config c = nand_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, pin_in);      // for WAIT, IN
+    sm_config_set_out_pins(&c, pin_out, 1);
+
+    sm_config_set_in_shift(&c, false, false, 32);
+
+    sm_config_set_clkdiv(&c, 1.0f);
+    
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_exec(pio, sm, 0xe043);      // set y, 3
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+%}
